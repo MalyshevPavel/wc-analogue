@@ -1,58 +1,99 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
+	"io"
 	"os"
-	"strings"
+	"unicode"
 )
 
-func wordCounter(fileName string, inputString string) (int, int, int, error) {
-	var linesCounter, wordsCounter, bytesCounter = -1, -1, -1
+type Result struct {
+	lines int
+	words int
+	bytes int
+}
 
-	if len(fileName) == 0 && len(inputString) == 0 {
-		return -1, -1, -1, fmt.Errorf("ошибка: укажите либо имя файла, либо строку для анализа")
-	}
+func countFromStdin(reader io.Reader) (Result, error) {
+	result := Result{}
+	inWord := false
 
-	fileInfo, err := os.Stat(fileName)
-	if err == nil && !fileInfo.IsDir() {
-		data, err := os.ReadFile(fileName)
+	r := bufio.NewReader(reader)
+
+	for {
+		ch, size, err := r.ReadRune()
 		if err != nil {
-			return -1, -1, -1, err
-		}
-		bytesCounter = len(data)
-
-		linesCounter = bytes.Count(data, []byte{'\n'})
-
-		// файл пуст, но все равно содержит 1 строку
-		if len(data) == 0 {
-			linesCounter++
+			if err == io.EOF {
+				break
+			}
+			return result, fmt.Errorf("ошибка чтения: %w", err)
 		}
 
-		// Если файл не пуст и не заканчивается на '\n', добавляем 1 строку по аналогии с командой wc
-		if len(data) > 0 && data[len(data)-1] != '\n' {
-			linesCounter++
+		result.bytes += size
+
+		switch {
+		case ch == '\n':
+			result.lines++
+			if inWord {
+				result.words++
+				inWord = false
+			}
+		case unicode.IsSpace(ch):
+			if inWord {
+				result.words++
+				inWord = false
+			}
+		default:
+			inWord = true
 		}
-
-		wordsCounter = len(strings.Fields(string(data)))
-
-		fmt.Println("\t", linesCounter, "\t", wordsCounter, "\t", bytesCounter, fileName)
-		return linesCounter, wordsCounter, bytesCounter, nil
 	}
 
-	// Преобразуем строку с \n в реальные переносы строк
-	inputString = strings.ReplaceAll(inputString, `\n`, "\n")
+	if inWord {
+		result.words++
+	}
 
-	bytesCounter = len([]byte(inputString))
+	return result, nil
+}
 
-	linesCounter = strings.Count(inputString, "\n") + 1
+func countFromFile(filename string) (Result, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return Result{}, fmt.Errorf("ошибка открытия файла: %w", err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "ошибка закрытия файла: %v\n", closeErr)
+		}
+	}()
 
-	wordsCounter = len(strings.Fields(inputString))
+	return countFromStdin(file)
+}
 
-	fmt.Println("\t", linesCounter, "\t", wordsCounter, "\t", bytesCounter)
-	return linesCounter, wordsCounter, bytesCounter, nil
+func exitOnError(err error) {
+	_, _ = fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
+	os.Exit(1)
+}
+
+func printResult(result Result, filename string) {
+	if filename != "" {
+		_, _ = fmt.Printf("\t%d\t%d\t%d %s\n", result.lines, result.words, result.bytes, filename)
+	} else {
+		_, _ = fmt.Printf("\t%d\t%d\t%d\n", result.lines, result.words, result.bytes)
+	}
 }
 
 func main() {
-
+	if len(os.Args) > 1 {
+		result, err := countFromFile(os.Args[1])
+		if err != nil {
+			exitOnError(err)
+		}
+		printResult(result, os.Args[1])
+	} else {
+		result, err := countFromStdin(os.Stdin)
+		if err != nil {
+			exitOnError(err)
+		}
+		printResult(result, "")
+	}
 }
