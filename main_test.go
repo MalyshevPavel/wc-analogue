@@ -98,9 +98,9 @@ func TestCountFromStdin(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reader := strings.NewReader(tt.input)
 
-			result, err := countFromStdin(reader)
+			result, err := countFromReader(reader)
 			if err != nil {
-				t.Fatalf("ошибка countFromStdin: %v", err)
+				t.Fatalf("ошибка countFromReader: %v", err)
 			}
 
 			if result.lines != tt.wantLines {

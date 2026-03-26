@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +15,7 @@ type Result struct {
 	bytes int
 }
 
-func countFromStdin(reader io.Reader) (Result, error) {
+func countFromReader(reader io.Reader) (Result, error) {
 	result := Result{}
 	inWord := false
 
@@ -23,7 +24,7 @@ func countFromStdin(reader io.Reader) (Result, error) {
 	for {
 		ch, size, err := r.ReadRune()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return result, fmt.Errorf("ошибка чтения: %w", err)
@@ -66,33 +67,24 @@ func countFromFile(filename string) (Result, error) {
 		}
 	}()
 
-	return countFromStdin(file)
-}
-
-func exitOnError(err error) {
-	_, _ = fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
-	os.Exit(1)
+	return countFromReader(file)
 }
 
 func printResult(result Result, filename string) {
-	if filename != "" {
-		_, _ = fmt.Printf("\t%d\t%d\t%d %s\n", result.lines, result.words, result.bytes, filename)
-	} else {
-		_, _ = fmt.Printf("\t%d\t%d\t%d\n", result.lines, result.words, result.bytes)
-	}
+	_, _ = fmt.Printf("\t%d\t%d\t%d %s\n", result.lines, result.words, result.bytes, filename)
 }
 
 func main() {
 	if len(os.Args) > 1 {
 		result, err := countFromFile(os.Args[1])
 		if err != nil {
-			exitOnError(err)
+			panic(err)
 		}
 		printResult(result, os.Args[1])
 	} else {
-		result, err := countFromStdin(os.Stdin)
+		result, err := countFromReader(os.Stdin)
 		if err != nil {
-			exitOnError(err)
+			panic(err)
 		}
 		printResult(result, "")
 	}
